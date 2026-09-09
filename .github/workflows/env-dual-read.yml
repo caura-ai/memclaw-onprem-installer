@@ -52,7 +52,7 @@ jobs:
         # would redden every PR in the repo rather than just this job.
         run: |
           python -m pip install --disable-pip-version-check --quiet 'pytest>=9.1.1,<10.0'
-          python -m pip install --disable-pip-version-check --quiet ./tools/cauractl  # legacy-name-floor: the shipped CLI's path
+          python -m pip install --disable-pip-version-check --quiet ./tools/cauractl
 
       # The whole directory, not one named file. Every other workflow here runs
       # exactly one test file by name, so a test file added to tests/ ran
@@ -69,4 +69,4 @@ jobs:
       # file has nothing checking it. Scoped to the two directories 5.3 touches
       # rather than turned into a repo-wide CI job, which is a separate decision.
       - name: The CLI's own tests
-        run: python -m pytest tools/cauractl/tests -q  # legacy-name-floor: the shipped CLI's path
+        run: python -m pytest tools/cauractl/tests -q
