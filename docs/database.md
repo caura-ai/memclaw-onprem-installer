@@ -48,7 +48,7 @@ POSTGRES_REQUIRE_SSL=true            # true to require TLS to the DB
 `install.sh` flags:
 
 ```sh
-./install.sh --hostname memclaw.acme.com --license ./license.key \
+./install.sh --hostname caura.acme.com --license ./license.key \
   --postgres-host db.internal.acme.com \
   --postgres-port 5432 \
   --postgres-user memclaw \

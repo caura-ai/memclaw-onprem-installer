@@ -176,10 +176,10 @@ runtime-config shim (`/env-config.js`) isn't being served.
 **Fix**: verify the shim is live:
 
 ```bash
-curl -s http://memclaw.acme.com/env-config.js
+curl -s http://caura.acme.com/env-config.js
 # → window.__MEMCLAW_CONFIG__ = {
-# →   apiUrl: "https://memclaw.acme.com",
-# →   siteUrl: "https://memclaw.acme.com",
+# →   apiUrl: "https://caura.acme.com",
+# →   siteUrl: "https://caura.acme.com",
 # →   billingEnabled: false,
 # → };
 ```

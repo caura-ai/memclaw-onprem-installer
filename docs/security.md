@@ -82,7 +82,7 @@ Auth flow at the wire:
 - Expiry has a **24-hour clock-drift tolerance** so NTP-adjacent
   glitches don't lock people out. Past 24h, the service flips to
   read-only until a valid license is dropped in.
-- **Tampering** = loud failure at startup. `memclaw_write` returns 403
+- **Tampering** = loud failure at startup. `caura_write` returns 403
   within 30s of the license flipping via the existing 30s read-only cache.
 
 ## Phone-home (optional)

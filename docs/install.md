@@ -11,7 +11,7 @@ installs see `install-airgap.md`.
   recent Docker Desktop / Docker CE).
 - **8 GB RAM** (16 GB recommended for >50 concurrent users).
 - **50 GB disk** free for Postgres + Redis + RabbitMQ.
-- A DNS record pointing to the VM (e.g. `memclaw.acme.com → 10.0.0.42`).
+- A DNS record pointing to the VM (e.g. `caura.acme.com → 10.0.0.42`).
 - A TLS certificate for that hostname (`cert.pem` + `key.pem`), or use the
   default self-signed cert / Let's Encrypt — see `TLS.md`.
 - A **license key** issued by Caura (`.key` file).

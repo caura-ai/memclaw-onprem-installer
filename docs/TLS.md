@@ -31,14 +31,14 @@ internally; your terminator handles TLS.
 Install:
 ```
 curl -sL https://onprem.caura.ai/install.sh | sudo bash -s -- \
-  --hostname memclaw.acme.com \
+  --hostname caura.acme.com \
   --bind-address 127.0.0.1 \
   --no-tls
 ```
 
 Your proxy:
 - Listens on 443 with your cert.
-- Sets `X-Forwarded-Proto: https`, `X-Forwarded-For`, `Host: memclaw.acme.com`.
+- Sets `X-Forwarded-Proto: https`, `X-Forwarded-For`, `Host: caura.acme.com`.
 - Proxies to `http://<host>:80` where Caura is listening on loopback.
 
 Caura honours `X-Forwarded-Proto`, so generated URLs (license
@@ -52,14 +52,14 @@ public DNS or a corporate CA available.
 Install:
 ```
 curl -sL https://onprem.caura.ai/install.sh | sudo bash -s -- \
-  --hostname memclaw.acme.com \
+  --hostname caura.acme.com \
   --tls-self-signed \
-  --tls-domain memclaw.acme.com
+  --tls-domain caura.acme.com
 ```
 
 What happens:
 - `openssl` generates an RSA-2048 cert valid 10 years with SAN
-  `DNS:memclaw.acme.com, DNS:localhost, IP:127.0.0.1`.
+  `DNS:caura.acme.com, DNS:localhost, IP:127.0.0.1`.
 - `cert.pem` + `key.pem` land in `$CAURA_HOME/tls/`.
 - The gateway entrypoint detects them and switches to the TLS
   template — port 80 redirects to 443; HSTS for 30 days.
@@ -81,9 +81,9 @@ your own ACME tooling).
 Install:
 ```
 curl -sL https://onprem.caura.ai/install.sh | sudo bash -s -- \
-  --hostname memclaw.acme.com \
-  --tls-cert /etc/ssl/memclaw/fullchain.pem \
-  --tls-key  /etc/ssl/memclaw/privkey.pem
+  --hostname caura.acme.com \
+  --tls-cert /etc/ssl/caura/fullchain.pem \
+  --tls-key  /etc/ssl/caura/privkey.pem
 ```
 
 Renewal: drop the new cert in place and `docker compose restart gateway`.
@@ -95,9 +95,9 @@ Renewal: drop the new cert in place and `docker compose restart gateway`.
 Once Caura runs HTTPS, OpenClaw nodes should reach it over HTTPS too:
 
 ```
-curl -s -X POST "https://memclaw.acme.com/api/v1/install-plugin" \
+curl -s -X POST "https://caura.acme.com/api/v1/install-plugin" \
   -H "Content-Type: application/json" \
-  -d '{"fleet_id":"prod","api_url":"https://memclaw.acme.com","api_key":"mc_..."}' \
+  -d '{"fleet_id":"prod","api_url":"https://caura.acme.com","api_key":"mc_..."}' \
   | bash
 ```
 
@@ -105,7 +105,7 @@ If the cert is self-signed, additionally trust it on the OpenClaw VM
 before restarting the OpenClaw gateway:
 
 ```
-sudo cp memclaw-cert.pem /usr/local/share/ca-certificates/memclaw.crt
+sudo cp caura-cert.pem /usr/local/share/ca-certificates/caura.crt
 sudo update-ca-certificates
 systemctl --user restart openclaw-gateway
 ```
@@ -120,7 +120,7 @@ FQDN. Caddy sidecar handles ACME issuance + renewal automatically; no
 manual cert juggling, ever.
 
 Requirements:
-- A DNS A/AAAA record pointing `memclaw.your-domain.com` at the VM's
+- A DNS A/AAAA record pointing `caura.your-domain.com` at the VM's
   public IP.
 - Port 80 reachable from the internet (HTTP-01 challenge). Open it in
   any firewall / cloud security group between the VM and the world.
@@ -129,9 +129,9 @@ Requirements:
 Install:
 ```
 curl -sL https://onprem.caura.ai/install.sh | sudo bash -s -- \
-  --hostname memclaw.acme.com \
+  --hostname caura.acme.com \
   --tls-letsencrypt \
-  --tls-domain memclaw.acme.com \
+  --tls-domain caura.acme.com \
   --tls-email ops@acme.com
 ```
 

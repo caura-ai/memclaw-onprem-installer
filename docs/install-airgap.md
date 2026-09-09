@@ -55,7 +55,7 @@ if you don't pass a path.
 ./install.sh \
   --non-interactive \
   --offline \
-  --hostname memclaw.acme.com \
+  --hostname caura.acme.com \
   --admin-email admin@acme.com \
   --admin-password-file /run/secrets/admin_pw \
   --license /path/to/license.key \
@@ -87,7 +87,7 @@ Two options, both do the same thing:
 **B. Pass `--skip-admin` and finish in the browser**:
 ```bash
 ./install.sh --non-interactive --offline --hostname ... --license ... --skip-admin
-# → Visit https://memclaw.acme.com/setup
+# → Visit https://caura.acme.com/setup
 ```
 
 The web wizard uploads the license, creates the first admin, and prints
@@ -99,16 +99,16 @@ returns 404 from then on (enforced server-side by the first-run gate in
 
 ```bash
 # Health via the gateway (port 80)
-curl -sf http://memclaw.acme.com/healthz
+curl -sf http://caura.acme.com/healthz
 # → ok
 
 # License status — behind JWT auth, use the admin account you just created
-JWT=$(curl -s -X POST http://memclaw.acme.com/api/auth/user/login \
+JWT=$(curl -s -X POST http://caura.acme.com/api/auth/user/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@acme.com","password":"..."}' \
   | jq -r .access_token)
 
-curl -s http://memclaw.acme.com/api/license/status \
+curl -s http://caura.acme.com/api/license/status \
   -H "Authorization: Bearer $JWT" | jq '.severity, .days_remaining'
 # → "ok"
 # → 364
