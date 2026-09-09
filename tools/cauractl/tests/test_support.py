@@ -133,7 +133,7 @@ def test_cap_size_large_file_truncated_with_marker():
 
 @pytest.fixture
 def fake_home(tmp_path: Path) -> Path:
-    home = tmp_path / "opt-memclaw"
+    home = tmp_path / "opt-caura"
     (home / "logs" / "platform-admin-api").mkdir(parents=True)
     (home / "logs" / "core-api").mkdir(parents=True)
 
