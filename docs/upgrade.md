@@ -85,16 +85,16 @@ docker image prune  # removes unreferenced images only
 
 ```bash
 # Version endpoint reflects the new tag
-curl -sf http://memclaw.acme.com/api/version | jq .version
+curl -sf http://caura.acme.com/api/version | jq .version
 # → "v1.1.0"
 
 # License still valid
-curl -s http://memclaw.acme.com/api/license/status \
+curl -s http://caura.acme.com/api/license/status \
   -H "Authorization: Bearer $JWT" | jq .severity
 # → "ok"
 
 # Write a test memory + search for it (round-trip through the full stack)
-curl -s -X POST http://memclaw.acme.com/api/memories \
+curl -s -X POST http://caura.acme.com/api/memories \
   -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
   -d '{"tenant_id":"...","agent_id":"...","content":"upgrade-smoke","memory_type":"fact"}'
 # → 201
