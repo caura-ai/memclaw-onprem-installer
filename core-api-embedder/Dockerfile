@@ -7,7 +7,7 @@
 #   - On-prem + air-gapped customers have no API key and no internet, so
 #     EMBEDDING_PROVIDER=local is the only option. LocalEmbedding
 #     lazy-imports sentence-transformers which isn't in the base image —
-#     that's why memclaw_recall returned 503 in the first E2E run.
+#     that's why the recall request returned 503 in the first E2E run.
 #   - This image adds sentence-transformers (~1.1GB after torch) + the
 #     default BAAI/bge-base-en-v1.5 model weights (~400MB), pre-downloaded
 #     at build time so the container starts offline.
