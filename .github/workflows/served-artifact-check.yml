@@ -17,9 +17,14 @@ name: Served-artifact check
 #
 # It needs no credential: a public bucket in front of a public repo. The
 # PUBLISHER needs GCS write access and therefore lives in a private repo
-# (caura-ai/caura-enterprise, the on-prem release workflow's publish-installer
-# job). Reading and publishing have different credential shapes, so they live in
-# different places, and that is why this half can be here.
+# (caura-ai/caura-onprem, the private half this repo mirrors -- its own
+# "Publish installer" workflow, on every push to ITS main). Reading and
+# publishing have different credential shapes, so they live in different
+# places, and that is why this half can be here. Verified 2026-09-12: as of
+# then that workflow was disabled_manually and had not run since 2026-08-24,
+# and the two repos' main branches had drifted well past a simple mirror lag
+# (124 commits on one side only, 69 on the other) -- so do not assume a push
+# to THIS repo's main is what republishes the channel.
 
 on:
   schedule:

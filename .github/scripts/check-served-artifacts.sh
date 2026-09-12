@@ -20,10 +20,32 @@
 # output is "the channel is serving the state of commit X, which is N commits
 # behind", which is actionable, rather than "these files differ", which is not.
 #
-# A served copy that matches NO commit is reported separately and is the more
-# serious state: it means the channel is serving something that never came from
-# this repository. That was literally true before 2026-08-25, when the object
-# being served came from the private fork half.
+# A served copy that matches no commit's CURRENT path is split into two
+# further states, because "absent from origin/main" collapses two different
+# claims into one. `_match_commit` walks this path's full history --
+# additions, edits, and the deletion itself are all commits that "touch" the
+# path -- so a served copy can still match a commit even though the path is
+# gone today. That match is REMOVED: a real, formerly-tracked file this repo
+# once held, still being served after this repo dropped it. A served copy
+# that matches NOTHING in that walk is UNACCOUNTED, which still carries one
+# more distinction worth naming even though both halves fail the build the
+# same way: a path with no commits touching it, ever, never came from this
+# repository at all; a path with commits, none of whose blobs are these
+# bytes, WAS tracked, but these particular served bytes are not a copy of
+# anything this repo ever produced for it (tampering, corruption, or a
+# coincidental name collision) -- not "this repo never had this path". The
+# report says which. UNACCOUNTED is the more serious of the two states
+# either way: it means the channel is serving something that never came from
+# this repository. That was literally true before 2026-08-25, when the
+# object being served came from the private fork half. The distinction
+# matters operationally too: a bundle built with macOS's tar/libarchive
+# defaults ships one `._name` AppleDouble sidecar per entry that carries
+# Finder metadata (COPYFILE_DISABLE=1 or --no-mac-metadata suppresses it) --
+# every one of those is UNACCOUNTED (this repo never tracked a `._`-prefixed
+# path), and on a bundle built that way they outnumber and bury whatever
+# else is actually wrong. REMOVED existing as its own bucket is what keeps a
+# single genuinely informative entry (a stray vendored file the source
+# checkout hadn't cleaned up) from reading as one more line in that noise.
 #
 # SCHEDULED, NOT A PR GATE, deliberately. Between two publishes the repository
 # is SUPPOSED to be ahead of the channel — that is what an unpublished commit
@@ -54,9 +76,16 @@ trap 'rm -rf "$work"' EXIT
 
 stale=0
 unmatched=0
+removed=0
 unreachable=0
 refused=0
 current=0
+# A local `git rev-list` failure while walking a path's history -- distinct
+# from every other counter, which is a verdict ABOUT the served bytes. This
+# one means the check couldn't be completed for that path at all, so it must
+# never be folded into unmatched/removed's messages, both of which assert
+# something specific about what the bytes are or aren't.
+errors=0
 report=""
 
 # Hash a blob out of history without checking it out. Prints nothing and
@@ -69,10 +98,36 @@ _blob_sha() {
 
 # The heart of it: which commit's version of $path do these bytes match?
 # Walks newest-first and stops at the first match, so the answer is the most
-# recent commit that could have produced them.
+# recent commit that could have produced them. Takes the candidate commit
+# list as trailing args when the caller already has one (see _compare's
+# REMOVED/UNACCOUNTED branch, which also needs to know whether the path has
+# ANY history and would otherwise walk rev-list twice for the same path);
+# derives its own otherwise, for the call site in _compare that doesn't need
+# that list for anything else.
+#
+# Three-way return, not two: 0 with the commit on stdout = matched, 1 = no
+# match (a real verdict -- every history candidate's blob was checked and
+# none is these bytes), 2 = couldn't tell (git rev-list itself failed while
+# deriving the fallback list). Collapsing 1 and 2 is exactly the mistake
+# _compare's own REMOVED/UNACCOUNTED branch was written to avoid one level
+# up -- a caller here must be able to make the same distinction, so it
+# cannot be lost inside this function. Captured via a plain command
+# substitution rather than `cmd | mapfile` for the same reason as
+# _compare's: a process-substitution pipe loses git's real exit status.
 _match_commit() {
-  local path="$1" want="$2" commit
-  for commit in $(git rev-list "$REF" -- "$path"); do
+  local path="$1" want="$2"
+  shift 2
+  local -a candidates=("$@")
+  local commit history_raw
+  if [ "${#candidates[@]}" -eq 0 ]; then
+    if ! history_raw=$(git rev-list "$REF" -- "$path"); then
+      return 2
+    fi
+    if [ -n "$history_raw" ]; then
+      mapfile -t candidates <<<"$history_raw"
+    fi
+  fi
+  for commit in "${candidates[@]}"; do
     if [ "$(_blob_sha "$commit" "$path" || true)" = "$want" ]; then
       printf '%s' "$commit"
       return 0
@@ -88,7 +143,41 @@ _compare() {
   served_sha=$(shasum -a 256 "$served_file" | cut -d' ' -f1)
 
   if ! head_sha=$(_blob_sha "$REF" "$path"); then
-    report+=$(printf '\n  %-42s served, but %s does not exist at %s' "$label" "$path" "$REF")
+    # The path is absent at REF's tip, but "absent now" and "never existed"
+    # are different claims -- see the REMOVED-vs-unaccounted note up top.
+    # The candidate history is walked ONCE here and handed to _match_commit,
+    # rather than asking git for the same path's history twice (a byte-match
+    # attempt, then a separate "does it have any history at all" check).
+    # Captured as a plain command substitution rather than piped into
+    # mapfile via process substitution specifically so a real `git rev-list`
+    # failure is visible on `$?` here and doesn't get silently read as "no
+    # history" -- see _blob_sha's own `|| return 1` for the same reasoning;
+    # `cmd | mapfile` loses that exit status because mapfile succeeds at
+    # reading zero bytes regardless of why the pipe produced none.
+    local history_raw
+    if ! history_raw=$(git rev-list "$REF" -- "$path"); then
+      report+=$(printf '\n  %-42s ERROR  could not read history for %s -- git rev-list failed' "$label" "$path")
+      errors=$((errors + 1))
+      return
+    fi
+    local -a history=()
+    if [ -n "$history_raw" ]; then
+      mapfile -t history <<<"$history_raw"
+    fi
+
+    if [ "${#history[@]}" -gt 0 ] && commit=$(_match_commit "$path" "$served_sha" "${history[@]}"); then
+      subject=$(git log -1 --format='%s' "$commit" | cut -c1-48)
+      report+=$(printf '\n  %-42s REMOVED matches %s (%s); %s no longer exists at %s' \
+        "$label" "${commit:0:8}" "$subject" "$path" "$REF")
+      removed=$((removed + 1))
+      return
+    fi
+    if [ "${#history[@]}" -gt 0 ]; then
+      report+=$(printf '\n  %-42s UNACCOUNTED %s existed in %s history but served bytes match no historical version of it' \
+        "$label" "$path" "$REF")
+    else
+      report+=$(printf '\n  %-42s UNACCOUNTED %s never existed in %s history' "$label" "$path" "$REF")
+    fi
     unmatched=$((unmatched + 1))
     return
   fi
@@ -99,8 +188,15 @@ _compare() {
     return
   fi
 
-  if ! commit=$(_match_commit "$path" "$served_sha"); then
-    report+=$(printf '\n  %-42s MATCHES NO COMMIT in %s -- served bytes did not come from this repo' "$label" "$REF")
+  local match_rc=0
+  commit=$(_match_commit "$path" "$served_sha") || match_rc=$?
+  if [ "$match_rc" -eq 2 ]; then
+    report+=$(printf '\n  %-42s ERROR  could not read history for %s -- git rev-list failed' "$label" "$path")
+    errors=$((errors + 1))
+    return
+  fi
+  if [ "$match_rc" -ne 0 ]; then
+    report+=$(printf '\n  %-42s UNACCOUNTED matches no commit in %s -- served bytes did not come from this repo' "$label" "$REF")
     unmatched=$((unmatched + 1))
     return
   fi
@@ -199,13 +295,17 @@ else
 fi
 
 printf '%s\n\n' "$report"
-printf 'current %d, stale %d, unaccounted %d, unreachable %d, refused %d\n' \
-  "$current" "$stale" "$unmatched" "$unreachable" "$refused"
+printf 'current %d, stale %d, removed %d, unaccounted %d, unreachable %d, refused %d, errors %d\n' \
+  "$current" "$stale" "$removed" "$unmatched" "$unreachable" "$refused" "$errors"
 
-# Three distinct failures with three distinct remedies, so three messages
-# rather than one counter. Collapsing them was the first thing the
-# unreachable-channel dry run exposed: it printed "did not come from this
-# repository" about a 404, which sends the reader looking for the wrong problem.
+# Distinct failures with distinct remedies, so distinct messages rather than
+# one counter. Collapsing them was the first thing the unreachable-channel
+# dry run exposed: it printed "did not come from this repository" about a
+# 404, which sends the reader looking for the wrong problem. `errors` is the
+# same principle applied to a local git failure: it asserts nothing about
+# the served bytes, so it must never share a message with a bucket that
+# does (unmatched's "did not come from this repository" is a claim about
+# the bytes; a `git rev-list` failure supports no claim about them at all).
 if [ "$refused" -gt 0 ]; then
   echo
   echo "::error::A served archive contains member(s) that cannot correspond to a path in this repository and was NOT extracted. An absolute path, a parent traversal or a symlink in bundle.tar.gz means the archive was not built by the documented recipe — find out what published it before trusting anything else about the channel."
@@ -216,17 +316,27 @@ if [ "$unreachable" -gt 0 ]; then
   echo "::error::${unreachable} artefact(s) could not be fetched from ${BASE}. Either the channel is down or an object is missing from the bucket — check the URL before reading anything else here, because nothing below was measured."
 fi
 
+if [ "$errors" -gt 0 ]; then
+  echo
+  echo "::error::${errors} artefact(s) could not be checked because \`git rev-list\` failed locally — this says nothing about what the channel is serving. Rerun, or investigate the checkout (fetch depth, repo corruption), not the channel."
+fi
+
 if [ "$unmatched" -gt 0 ]; then
   echo
-  echo "::error::${unmatched} served artefact(s) could not be accounted for against ${REF}. A served copy that matches no commit did not come from this repository — check which repo published it before publishing over it."
+  echo "::error::${unmatched} served artefact(s) could not be accounted for against ${REF}: their bytes never matched any commit of that path, ever. A served copy like this did not come from this repository — check which repo published it before publishing over it. If most of these carry a '._' prefix, that is macOS's tar/libarchive shipping one AppleDouble metadata sidecar per real file (COPYFILE_DISABLE=1 or --no-mac-metadata prevents it) — a strong sign the bundle was built and published by hand on a Mac rather than by CI, and worth chasing regardless of how many of the entries below are that same noise."
+fi
+
+if [ "$removed" -gt 0 ]; then
+  echo
+  echo "::error::${removed} served artefact(s) match a path this repository has since deleted. The channel is still serving content this repo dropped — republish, and find out why the deletion never reached the channel."
 fi
 
 if [ "$stale" -gt 0 ]; then
   echo
-  echo "::error::${stale} served artefact(s) are behind ${REF}. Customers are fetching an older copy than this repository holds. Publishing is a run of the on-prem release workflow in caura-ai/caura-enterprise; see its publish-installer job."
+  echo "::error::${stale} served artefact(s) are behind ${REF}. Customers are fetching an older copy than this repository holds. Publishing is the 'Publish installer' workflow in caura-ai/caura-onprem (the private half this repo mirrors) — it pushes on every push to ITS main, not this repo's; verify the two are in sync before assuming a push here republishes anything."
 fi
 
-if [ "$stale" -gt 0 ] || [ "$unmatched" -gt 0 ] || [ "$unreachable" -gt 0 ] || [ "$refused" -gt 0 ]; then
+if [ "$stale" -gt 0 ] || [ "$unmatched" -gt 0 ] || [ "$removed" -gt 0 ] || [ "$unreachable" -gt 0 ] || [ "$refused" -gt 0 ] || [ "$errors" -gt 0 ]; then
   exit 1
 fi
 
